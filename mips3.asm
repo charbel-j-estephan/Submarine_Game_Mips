@@ -221,14 +221,10 @@ color_array: .word
 
 
 .text
-.globl main
 
+
+# Main animation loop
 main:
-    j main_loop                        # Jump to the main animation loop
-
-# Main animation loop
-# Main animation loop
-main_loop:
     # Draw the sea and submarine
     jal draw_sea_partial               # Draw a portion of the sea each frame
     jal draw_sea_at_submarine          # Clear submarine's old position
@@ -265,7 +261,7 @@ main_loop:
     sw $t1, frame_counter              # Store reset counter
 
 skip_delay:
-    j main_loop                        # Loop back to start of main loop
+    j main                        # Loop back to start of main loop
 # ---- Function: Draw sea at submarine position (to clear old position) ----
 draw_sea_at_submarine:
     # Save return address
