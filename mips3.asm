@@ -1,0 +1,716 @@
+.data
+    # Bitmap display configuration
+    DISPLAY_WIDTH:    .word 256        # Width of the display in pixels (256x256 resolution)
+    DISPLAY_HEIGHT:   .word 256        # Height of the display in pixels
+    BITMAP_BASE:      .word 0x10040000 # Base address of the MIPS bitmap display memory
+
+    # MMIO (Memory-Mapped I/O) constants
+    KEYBOARD_ADDR:    .word 0xffff0004 # Memory-mapped address for keyboard input
+
+    # Animation state variables
+    animation_offset: .word 0          # Current frame offset for animation (used for wave effects)
+    update_section:   .word 0          # Current section of the sea being updated (0-3 for partial updates)
+
+    # Sea colors
+    sea_light:        .word 0x0032C7D3 # Light blue color for sea reflections
+    sea_highlight:    .word 0x0048D7E0 # Brightest blue color for sea highlights
+
+    # Gradient transition properties
+    GRADIENT_WIDTH:   .word 8          # Width of gradient transition zones for smooth color blending
+
+    # Submarine properties
+    sub_x:            .word 20         # Submarine's fixed x-position (horizontal position)
+    sub_y:            .word 128        # Submarine's y-position (vertical position, can move up/down)
+    sub_length:       .word 25         # Length of the submarine in pixels
+    sub_width:        .word 11         # Width of the submarine in pixels
+    sub_direction:    .word 0          # Submarine's direction: 0 = up, 2 = down
+    sub_color:        .word 0xfffa00   # Yellow color for the submarine's body (RGB)
+    sub_window:       .word 0x00FFFF   # Light blue color for the submarine's window
+
+    # Performance optimization variables
+    refresh_count:    .word 0          # Counter to control the refresh rate of the display
+    refresh_rate:     .word 0          # Always refresh together with submarine movement
+    prev_sub_y:       .word 128        # Previous y-position of the submarine (used to clear old position)
+
+    # Submarine image data (color array)
+    # Each row represents a row of pixels in the submarine's image
+    # Colors are stored as 24-bit RGB values (0xRRGGBB)
+    color_array:
+    # Row 0 to Row 10 (11 rows total, each with 25 pixels)
+    # Row 0
+    .word 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x334455, 0x334455, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 1
+    .word 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0xA8E4F1, 0xA8E4F1, 0xA8E4F1, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x334455, 0x334455, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 2
+    .word 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0xA8E4F1, 0xA8E4F1, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x334455, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 3
+    .word 0x334455, 0x000000, 0x000000, 0x000000, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 4
+    .word 0x334455, 0x334455, 0x000000, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x334455, 0x334455, 0x334455, 0x334455, 0x334455, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 5
+    .word 0x334455, 0x334455, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x334455, 0xA8E4F1, 0xA8E4F1, 0xA8E4F1, 0xA8E4F1, 0x334455, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 6
+    .word 0x334455, 0x334455, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x334455, 0xA8E4F1, 0xA8E4F1, 0xA8E4F1, 0xA8E4F1, 0x334455, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 7
+    .word 0x334455, 0x334455, 0x000000, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x334455, 0x334455, 0x334455, 0x334455, 0x334455, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 8
+    .word 0x334455, 0x000000, 0x000000, 0x000000, 0x000000, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 9
+    .word 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0xA8E4F1, 0xA8E4F1, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0xFFFA00, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Row 10
+    .word 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+    # Frame rate control variables
+    frame_counter: .word 0
+    frame_rate:    .word 60  # Target frame rate (e.g., 60 frames per second)
+    
+    sub_img_width:    .word 25         # Width of the submarine image (matches sub_length)
+    sub_img_height:   .word 11         # Height of the submarine image (matches sub_width)
+    
+    shark_color_array:
+    .word 
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x152639, 0x182131, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x1f2b3e, 0x3e93c1, 0x4299c9, 0x2f6485
+0x17232f, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x1c5677, 0x40b3f0, 0x47b7f2
+0x4abaf5, 0x4096c5, 0x29506c, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x427c9a, 0x49acdb
+0x2097d1, 0x269ad7, 0x2ea4e0, 0x3aa6e1, 0x30698b, 0x0e070e, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x1f1a25, 0xcbced4
+0xf8fdfe, 0x9acee6, 0x1a8ec8, 0x128bca, 0x1690cd, 0x2ba6e2, 0x2d6b92, 0x0f0000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x4e4e55
+0xe3e7ec, 0xf9fdff, 0xfefeff, 0xa2d4e9, 0x188dc9, 0x1590cf, 0x146894, 0x2e739a
+0x254e6a, 0x26485d, 0x214963, 0x1f3851, 0x171b2c, 0x0b0000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x736e78, 0xf7fdff, 0xfaffff, 0xfbffff, 0xfdffff, 0x89c7e5, 0x118ac8, 0x0f2129
+0x444d54, 0x247aa8, 0x3c8ab4, 0x4ab4eb, 0x44a7dd, 0x3892c6, 0x2c6b90, 0x1a2a37
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x605b62, 0x908d8f, 0x979c9e, 0xb2b7bb, 0xe6ebed, 0xfcffff, 0x76bee2
+0x095074, 0x0e4865, 0x168fcc, 0x217096, 0x2693cc, 0x1b94d3, 0x1a96d5, 0x1e8bc5
+0x152d3e, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x4f4c52, 0x6d2525, 0x743838, 0x581d1d, 0x83797a, 0xadafb0
+0xe5eaed, 0x85cbe9, 0x289cd6, 0x1890cf, 0x177db5, 0x1472a2, 0x1590d0, 0x1891d0
+0x144e74, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x6e0203, 0x990000, 0x960000, 0x8a5557
+0x5a2929, 0x6e6060, 0xa49ea0, 0xa3acb0, 0x73b9dc, 0x108bcc, 0x176d9b, 0x1791cf
+0x17618d, 0x0f070f, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x5f0309, 0xa00102, 0x9a0101
+0x6c0000, 0x630000, 0x590503, 0x5a2122, 0x814643, 0x8dcae6, 0x0d8dcd, 0x1880b7
+0x155f88, 0x111c33, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x47090c, 0x950202
+0x7c0000, 0x661513, 0x802628, 0x812726, 0x610c0b, 0x986e6f, 0x92d0ec, 0x0e87c7
+0x1790cc, 0x164d72, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x3f040e
+0x6e0808, 0xaa3f3f, 0xf06564, 0xff6b6b, 0xff6d6c, 0xd25754, 0xcbbfbf, 0x9cd4f0
+0x0d78b0, 0x157baf, 0x1887c3, 0x175480, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x0a0005, 0xa24142, 0xff6d6a, 0xff6966, 0xe5605e, 0xcb5252, 0x8c6867, 0xf5f7f8
+0xa8daf0, 0x0e6a98, 0x165f88, 0x1790cd, 0x1981b8, 0x173f6b, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x614049, 0xdc5d5b, 0xfa6663, 0xf96461, 0xb15755, 0x776767, 0xcdd3d4
+0xfeffff, 0xc1dfeb, 0x166188, 0x156089, 0x178cc8, 0x1894d3, 0x1977ae, 0x152b4b
+0x0e0000, 0x17000b, 0x000000, 0x000000, 0x000000, 0x000000, 0x0c0000, 0x000000
+0x000000, 0x000000, 0x635c5d, 0x7f6665, 0x8b504f, 0x865354, 0x7d6e6f, 0xd1dadc
+0xf9ffff, 0xf8fcff, 0xe0eef4, 0x2b88b9, 0x1483bd, 0x1790cd, 0x168ecb, 0x1893d1
+0x166d9c, 0x2d6387, 0x286285, 0x000000, 0x000000, 0x29455f, 0x28709b, 0x194c6a
+0x090909, 0x000000, 0x000000, 0x77737d, 0xe4eaed, 0xd1dadb, 0xd8e2e5, 0xf4feff
+0xf7ffff, 0xf3f8fe, 0xf5fdfe, 0xd5e0e5, 0x2f8fc1, 0x1b94d2, 0x168ac5, 0x158fce
+0x158ecd, 0x1692d0, 0x2087bd, 0x206187, 0x27354e, 0x316a8c, 0x2d98cf, 0x1c92d1
+0x134568, 0x000000, 0x000000, 0x000000, 0x000000, 0x9d9ea4, 0xf5ffff, 0xe2f0f7
+0xd4e5ef, 0xcde0ec, 0xcbdeea, 0xcfe1ed, 0xa7bac7, 0x2e8fc2, 0x30a4e0, 0x136ea0
+0x0b7dba, 0x0f87c7, 0x0e8ccb, 0x0c8ccd, 0x178fca, 0x2d8dc2, 0x2d9ad3, 0x1896d6
+0x16628f, 0x190000, 0x000000, 0x000000, 0x000000, 0x000000, 0x1b161b, 0x757f8a
+0xc1d4e1, 0xc7dfee, 0xc2dbe9, 0xc0d9e6, 0xc5dceb, 0x9db3c0, 0x2988ba, 0x3bb0ec
+0x1c729f, 0x5c97b6, 0x5ba4cb, 0x5caed6, 0x6bbae2, 0x52aedb, 0x1b92ce, 0x1492d2
+0x1875a9, 0x132c46, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x00000a
+0x10527a, 0x37627d, 0x8698a2, 0xb3c7d3, 0xc3d9e7, 0xcbe1ef, 0xafc3cd, 0x2b80ae
+0x40b3f1, 0x1e7dac, 0x859097, 0x949da6, 0x8d96a1, 0x91949b, 0x8d8a8d, 0x1e6590
+0x1798d9, 0x166a9c, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x17070f, 0x116a9b, 0x046191, 0x06111f, 0x373139, 0x52555e, 0x61666f, 0x5b5e62
+0x1d5f82, 0x3fb5f4, 0x2385ba, 0x030f1e, 0x000000, 0x000000, 0x000000, 0x000000
+0x12375a, 0x1a8eca, 0x176b9c, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x190000, 0x0f5780, 0x0d4263, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x103552, 0x35a3dc, 0x2d95cc, 0x0c273d, 0x000000, 0x000000, 0x000000
+0x000000, 0x1c0000, 0x195f8a, 0x176d9b, 0x150015, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x132437, 0x15192b, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x0b0000, 0x216088, 0x2f9ad4, 0x122a42, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x0e152b, 0x163f5c, 0x19192a, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x141429, 0x1c4b6c, 0x17293a, 0x000000
+0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x240000, 0x1e0f1e, 0x000000
+0x000000
+    # shark properties
+    shark_x:            .word 256         # Starting x position (right edge)
+    shark_y:            .word 240         # Fixed y position
+    shark_prev_x:       .word 256         # Previous x position
+    shark_width:        .word 25          # Width of the shark
+    shark_height:       .word 24          # Height of the shark
+    # Add this to your existing data section
+    RAND_MAX:        .word 256         # Maximum random value (display height)
+    RAND_MIN:        .word 180         # Minimum random value for y (to keep sharks in lower part)
+    rand_seed:       .word 12345       # Random seed
+    rand_mult:       .word 1103515245  # Multiplier for linear congruential generator
+    rand_inc:        .word 12345       # Increment for LCG
+    rand_mod:        .word 65536       # Modulus (2^16)
+    shark_y_min:      .word 150         # Minimum y-coordinate for sharks
+    shark_y_range:    .word 80          # Range of possible y values
+
+.text
+.globl main
+
+main:
+    j main_loop                        # Jump to the main animation loop
+
+# Main animation loop
+# Main animation loop
+main_loop:
+    # Draw the sea and submarine
+    jal draw_sea_partial               # Draw a portion of the sea each frame
+    jal draw_sea_at_submarine          # Clear submarine's old position
+    jal move_shark                      # Move the shark obstacle from right to left
+    jal draw_shark                      # Draw the shark at its new position
+    jal draw_image_submarine           # Draw the submarine at its current position
+
+    # Update animation state
+    lw $t0, animation_offset           # Load current animation offset
+    addi $t0, $t0, 1                   # Increment offset by 1
+    andi $t0, $t0, 0xFF                # Keep offset within 0-255 range
+    sw $t0, animation_offset           # Store updated offset
+
+    # Update the section of sea to redraw next frame
+    lw $t0, update_section             # Load current section
+    addi $t0, $t0, 1                   # Increment section
+    andi $t0, $t0, 0x3                 # Cycle through sections 0-3
+    sw $t0, update_section             # Store updated section
+
+    # Check for input and collisions
+    jal check_keyboard                 # Handle keyboard input for submarine movement
+    jal check_collision                # Check if submarine hit a shark
+
+    # Frame rate control
+    lw $t1, frame_counter              # Load current frame counter
+    addi $t1, $t1, 1                   # Increment counter
+    sw $t1, frame_counter              # Store updated counter
+
+    lw $t2, frame_rate                 # Load target frame rate
+    blt $t1, $t2, skip_delay           # Skip delay if counter < frame rate
+
+    # Reset frame counter when we reach target rate
+    li $t1, 0                          # Reset counter to 0
+    sw $t1, frame_counter              # Store reset counter
+
+skip_delay:
+    j main_loop                        # Loop back to start of main loop
+# ---- Function: Draw sea at submarine position (to clear old position) ----
+draw_sea_at_submarine:
+    # Save return address
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    # Load submarine's previous position
+    lw $t0, sub_x                      # Submarine's x-position
+    lw $t1, prev_sub_y                 # Submarine's previous y-position
+    lw $t2, sub_length                 # Submarine's length
+    lw $t3, sub_width                  # Submarine's width
+
+    # Calculate rectangle to clear (centered on submarine's old position)
+    sra $t4, $t2, 1                    # Half of submarine's length
+    sra $t5, $t3, 1                    # Half of submarine's width
+    sub $t0, $t0, $t4                  # Left edge of rectangle
+    sub $t1, $t1, $t5                  # Top edge of rectangle
+
+    # Add margin to the rectangle (make it slightly larger than the submarine)
+    addi $t0, $t0, -2                  # Expand left edge
+    addi $t1, $t1, -2                  # Expand top edge
+    addi $t2, $t2, 4                   # Expand width
+    addi $t3, $t3, 4                   # Expand height
+
+    # Draw one pixel at a time with bounds checking
+    li $t6, 0                          # Initialize y-counter
+
+sea_clear_y_loop:
+    bge $t6, $t3, sea_clear_done       # If y-counter >= height, exit loop
+    li $t7, 0                          # Initialize x-counter
+
+sea_clear_x_loop:
+    bge $t7, $t2, sea_clear_next_y     # If x-counter >= width, move to next row
+
+    # Calculate actual x, y coordinates
+    add $a0, $t0, $t7                  # x = left + x-counter
+    add $a1, $t1, $t6                  # y = top + y-counter
+
+    # Check if x, y is within screen bounds
+    bltz $a0, sea_skip_pixel           # Skip if x < 0
+    bltz $a1, sea_skip_pixel           # Skip if y < 0
+    lw $t8, DISPLAY_WIDTH
+    bge $a0, $t8, sea_skip_pixel       # Skip if x >= display width
+    lw $t8, DISPLAY_HEIGHT
+    bge $a1, $t8, sea_skip_pixel       # Skip if y >= display height
+
+    # Calculate pixel position in memory
+    jal calc_position                  # Call function to calculate memory address
+
+    # Draw sea pixel (use sea_light color)
+    lw $t8, sea_light
+    sw $t8, 0($v0)                     # Store color at calculated address
+
+sea_skip_pixel:
+    addi $t7, $t7, 1                   # Increment x-counter
+    j sea_clear_x_loop                 # Repeat for next pixel
+
+sea_clear_next_y:
+    addi $t6, $t6, 1                   # Increment y-counter
+    j sea_clear_y_loop                 # Repeat for next row
+
+sea_clear_done:
+    # Restore return address
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra                             # Return to caller
+
+# ---- Function: Draw only 1/4 of the sea each frame for faster animation ----
+draw_sea_partial:
+    # Save essential registers
+    addi $sp, $sp, -8
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+
+    # Load bitmap base and dimensions
+    lw $t0, BITMAP_BASE                # Base address of bitmap display
+    lw $t1, DISPLAY_WIDTH              # Width of display
+    lw $t2, DISPLAY_HEIGHT             # Height of display
+
+    # Load sea colors
+    lw $s0, sea_light                  # Light sea color
+    lw $t3, sea_highlight              # Highlight sea color
+
+    # Get animation state
+    lw $t9, animation_offset           # Load animation offset
+
+    # Get section to update (0-3)
+    lw $t4, update_section             # Load current section
+
+    # Calculate row range for this section
+    li $t5, 64                         # Height / 4 = 64 rows per section
+    mul $t6, $t4, $t5                  # Start row = section * 64
+    add $t5, $t6, $t5                  # End row = start + 64
+
+    # Only process rows for current section
+sea_row_loop:
+    li $t7, 0                          # Initialize column counter (x)
+
+sea_col_loop:
+    # Default to sea_light color
+    move $t8, $s0                      # Set default color to sea_light
+
+    # Simplified wave pattern calculation
+    add $a0, $t7, $t6                  # x + y
+    srl $a0, $a0, 3                    # Divide by 8 for coarser pattern
+    add $a0, $a0, $t9                  # Add animation offset
+    andi $a0, $a0, 0x3F                # Modulo 64 to keep within range
+
+    # Simple horizontal pattern
+    srl $a1, $t7, 2                    # x / 4
+    add $a1, $a1, $t9                  # Add animation offset
+    andi $a1, $a1, 0x3F                # Modulo 64
+
+    # Simple binary decision for most pixels
+    add $a3, $a0, $a1                  # Combine x and y patterns
+    andi $a3, $a3, 0x3F                # Modulo 64
+    slti $k0, $a3, 32                  # Check if value < 32
+    beqz $k0, use_light                # If not, use light color
+
+    # Check if gradient is needed
+    slti $k0, $a3, 4                   # Check if value < 4
+    bnez $k0, light_to_highlight_gradient # If yes, apply gradient
+    slti $k0, $a3, 28                  # Check if value < 28
+    beqz $k0, highlight_to_light_gradient # If yes, apply gradient
+
+    # Core highlight region
+    move $t8, $t3                      # Use highlight color
+    j store_pixel                      # Jump to store pixel
+
+use_light:
+    # Use light color directly
+    move $t8, $s0                      # Set color to sea_light
+    j store_pixel                      # Jump to store pixel
+
+light_to_highlight_gradient:
+    # Simple 50/50 blend of light and highlight colors
+    srl $a0, $s0, 16                   # Extract R component of light color
+    andi $a0, $a0, 0xFF
+    srl $k1, $t3, 16                   # Extract R component of highlight color
+    andi $k1, $k1, 0xFF
+    add $a0, $a0, $k1                  # Sum R components
+    srl $a0, $a0, 1                    # Divide by 2 (average)
+    sll $a0, $a0, 16                   # Shift back to R position
+
+    # Extract G components
+    srl $v0, $s0, 8                    # Extract G component of light color
+    andi $v0, $v0, 0xFF
+    srl $k1, $t3, 8                    # Extract G component of highlight color
+    andi $k1, $k1, 0xFF
+    add $v0, $v0, $k1                  # Sum G components
+    srl $v0, $v0, 1                    # Divide by 2 (average)
+    sll $v0, $v0, 8                    # Shift back to G position
+
+    # Extract B components
+    move $v1, $s0                      # Extract B component of light color
+    andi $v1, $v1, 0xFF
+    move $k1, $t3                      # Extract B component of highlight color
+    andi $k1, $k1, 0xFF
+    add $v1, $v1, $k1                  # Sum B components
+    srl $v1, $v1, 1                    # Divide by 2 (average)
+
+    # Combine RGB components
+    or $t8, $a0, $v0                   # Combine R and G
+    or $t8, $t8, $v1                   # Combine with B
+    j store_pixel                      # Jump to store pixel
+
+highlight_to_light_gradient:
+    # Same as light_to_highlight_gradient
+    j light_to_highlight_gradient      # Jump to gradient calculation
+
+store_pixel:
+    # Calculate pixel address
+    mul $a0, $t6, $t1                  # y * width
+    add $a0, $a0, $t7                  # y * width + x
+    sll $a0, $a0, 2                    # Multiply by 4 (bytes per pixel)
+    add $a0, $a0, $t0                  # Add base address
+    sw $t8, 0($a0)                     # Store color at calculated address
+
+    # Optimization: Draw 2x2 pixel blocks
+    add $a0, $a0, 4                    # Move to next pixel to the right
+    sw $t8, 0($a0)                     # Store same color
+
+    # Next column (skip one for 2x2 blocks)
+    addi $t7, $t7, 2                   # Increment x-counter by 2
+    blt $t7, $t1, sea_col_loop         # Repeat for next column
+
+    # Next row (skip one for 2x2 blocks)
+    addi $t6, $t6, 1                   # Increment y-counter by 1
+    blt $t6, $t5, sea_row_loop         # Repeat for next row
+
+    # Restore registers
+    lw $s0, 4($sp)
+    lw $ra, 0($sp)
+    addi $sp, $sp, 8
+    jr $ra                             # Return to caller
+
+# ---- Function: Calculate display position ----
+calc_position:
+    # Get display base address
+    lw $v0, BITMAP_BASE                # Load base address of bitmap display
+    lw $t0, DISPLAY_WIDTH              # Load display width
+
+    # Calculate position = base + 4 * (y * width + x)
+    mul $t1, $a1, $t0                  # t1 = y * width
+    add $t1, $t1, $a0                  # t1 = y * width + x
+    sll $t1, $t1, 2                    # t1 = 4 * (y * width + x)
+    add $v0, $v0, $t1                  # v0 = base + offset
+
+    jr $ra                             # Return to caller
+
+# ---- Function: Draw submarine image at current position ----
+draw_image_submarine:
+    # Save return address and registers
+    addi $sp, $sp, -16
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+
+    # Load submarine position
+    lw $s0, sub_x                      # Load submarine's x-position
+    lw $s1, sub_y                      # Load submarine's y-position
+
+    # Load image dimensions
+    lw $s2, sub_img_width              # Load submarine image width
+    lw $s3, sub_img_height             # Load submarine image height
+
+    # Calculate top-left corner of image
+    sra $t0, $s2, 1                    # Half width
+    sra $t1, $s3, 1                    # Half height
+    sub $s0, $s0, $t0                  # Adjust x to center
+    sub $s1, $s1, $t1                  # Adjust y to center
+
+    # Check submarine direction (0 = up, 2 = down)
+    lw $t2, sub_direction              # Load submarine direction
+
+    # Draw the image
+    li $t3, 0                          # Initialize row counter (y)
+
+image_row_loop:
+    beq $t3, $s3, image_done           # If row counter >= height, exit loop
+    li $t4, 0                          # Initialize column counter (x)
+
+    # If submarine is pointing down, invert the row index
+    move $t9, $t3                      # Default row index
+    beq $t2, 0, normal_direction       # If direction is up, skip inversion
+
+    # For downward direction, invert the row
+    sub $t9, $s3, $t3                  # Invert row index
+    addi $t9, $t9, -1                  # Adjust for zero-based indexing
+
+normal_direction:
+    # Calculate base index into color array for this row
+    mul $t5, $t9, $s2                  # row * width
+    la $t6, color_array                # Load address of color array
+    sll $t5, $t5, 2                    # Convert to byte offset (4 bytes per word)
+    add $t6, $t6, $t5                  # Address of start of row in color array
+
+image_col_loop:
+    beq $t4, $s2, next_image_row       # If column counter >= width, move to next row
+
+    # Load color from array
+    sll $t5, $t4, 2                    # Convert column to byte offset
+    add $t7, $t6, $t5                  # Address of color
+    lw $t8, 0($t7)                     # Load color
+
+    # Skip drawing if color is 0x000000 (transparent)
+    beqz $t8, skip_pixel               # If color is transparent, skip
+
+    # Calculate screen position
+    add $a0, $s0, $t4                  # x = left + x-counter
+    add $a1, $s1, $t3                  # y = top + y-counter
+
+    # Check if pixel is within screen bounds
+    bltz $a0, skip_pixel               # Skip if x < 0
+    bltz $a1, skip_pixel               # Skip if y < 0
+    lw $t7, DISPLAY_WIDTH
+    bge $a0, $t7, skip_pixel           # Skip if x >= display width
+    lw $t7, DISPLAY_HEIGHT
+    bge $a1, $t7, skip_pixel           # Skip if y >= display height
+
+    # Draw pixel
+    jal calc_position                  # Calculate memory address
+    sw $t8, 0($v0)                     # Store pixel color
+
+skip_pixel:
+    addi $t4, $t4, 1                   # Increment column counter
+    j image_col_loop                   # Repeat for next column
+
+next_image_row:
+    addi $t3, $t3, 1                   # Increment row counter
+    j image_row_loop                   # Repeat for next row
+
+image_done:
+    # Restore registers and return
+    lw $s2, 12($sp)
+    lw $s1, 8($sp)
+    lw $s0, 4($sp)
+    lw $ra, 0($sp)
+    addi $sp, $sp, 16
+    jr $ra                             # Return to caller
+# ---- Function: Draw shark ----
+draw_shark:
+    addi $sp, $sp, -16
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+
+    lw $s0, shark_x          # Load shark's x
+    lw $s1, shark_y          # Load shark's y
+    lw $s2, shark_width      # Load shark width
+
+    li $t3, 0               # Row counter
+    lw $t4, shark_height     # shark height
+
+shark_row_loop:
+    beq $t3, $t4, shark_done
+    li $t5, 0               # Column counter
+
+    la $t6, shark_color_array
+    mul $t7, $t3, $s2       # row * width
+    sll $t7, $t7, 2         # byte offset
+    add $t6, $t6, $t7       # row address
+
+shark_col_loop:
+    beq $t5, $s2, next_shark_row
+
+    sll $t7, $t5, 2
+    add $t8, $t6, $t7
+    lw $t9, 0($t8)          # Load shark color
+    beqz $t9, skip_shark_pixel  # Skip if color is 0 (black/transparent)
+    add $a0, $s0, $t5       # x = shark_x + column
+    add $a1, $s1, $t3       # y = shark_y + row
+
+    # Bounds check
+    bltz $a0, skip_shark_pixel
+    lw $t7, DISPLAY_WIDTH
+    bge $a0, $t7, skip_shark_pixel
+    bltz $a1, skip_shark_pixel
+    lw $t7, DISPLAY_HEIGHT
+    bge $a1, $t7, skip_shark_pixel
+
+    jal calc_position
+    sw $t9, 0($v0)
+
+skip_shark_pixel:
+    addi $t5, $t5, 1
+    j shark_col_loop
+
+next_shark_row:
+    addi $t3, $t3, 1
+    j shark_row_loop
+
+shark_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    addi $sp, $sp, 16
+    jr $ra
+# ---- Function: Move shark left ----
+move_shark:
+    lw $t0, shark_x
+    addi $t0, $t0, -25       # Move left by 2 pixels
+    sw $t0, shark_x
+    
+    # Reset shark position if off-screen
+    bgez $t0, no_reset
+    
+    # Reset x position
+    li $t0, 256
+    sw $t0, shark_x
+    
+    # Generate pseudo-random number
+    lw $t1, rand_seed
+    lw $t2, rand_mult
+    mul $t3, $t1, $t2       # seed * multiplier
+    lw $t4, rand_inc
+    add $t3, $t3, $t4       # seed * multiplier + increment
+    lw $t5, rand_mod
+    div $t3, $t5            # (seed * multiplier + increment) % modulus
+    mfhi $t3                # Get remainder
+    sw $t3, rand_seed       # Store new seed
+    
+    # Scale to desired range
+    lw $t4, shark_y_range
+    mul $t3, $t3, $t4       # random * range
+    div $t3, $t5            # (random * range) / modulus
+    mflo $t3                # Get quotient
+    lw $t4, shark_y_min
+    add $t3, $t3, $t4       # random * range / modulus + min
+    
+    # Store new y position
+    sw $t3, shark_y
+    
+no_reset:
+    jr $ra
+# ---- Function: Check submarine-shark collision ----
+check_collision:
+    lw $t0, sub_x
+    lw $t1, sub_y
+    lw $t2, sub_length
+    lw $t3, sub_width
+
+    lw $t4, shark_x
+    lw $t5, shark_y
+    lw $t6, shark_width
+    lw $t7, shark_height
+
+    # Submarine bounds
+    sub $t8, $t0, $t2       # sub_left
+    add $t9, $t0, $t2       # sub_right
+    sub $s0, $t1, $t3       # sub_top
+    add $s1, $t1, $t3       # sub_bottom
+
+    # shark bounds
+    move $s2, $t4           # shark_left
+    add $s3, $t4, $t6       # shark_right
+    move $s4, $t5           # shark_top
+    add $s5, $t5, $t7       # shark_bottom
+
+    # Check overlap
+    bge $t8, $s3, no_collision
+    bge $s2, $t9, no_collision
+    bge $s0, $s5, no_collision
+    bge $s4, $s1, no_collision
+
+    # Collision detected - end game or reset
+    j game_over
+
+no_collision:
+    jr $ra
+
+game_over:
+    # Implement game over logic here
+    j Exit             # Or terminate
+# ---- Function: Check keyboard for input ----
+check_keyboard:
+    lw $t3, sub_y                      # Load submarine's current y-position
+    sw $t3, prev_sub_y                 # Store current y-position as previous
+
+    # Save return address
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    # Get keyboard ready bit address (control register)
+    lw $t0, KEYBOARD_ADDR
+    addi $t0, $t0, -4                  # Keyboard control is 4 bytes before data
+
+    # Check if a key is ready
+    lw $t1, 0($t0)                     # Load control value
+    andi $t1, $t1, 1                   # Check ready bit
+    beqz $t1, check_done               # If not ready, exit
+
+    # Get keyboard data address
+    lw $t0, KEYBOARD_ADDR
+
+    # Read character from keyboard
+    lw $t1, 0($t0)                     # Read full word instead of byte
+    andi $t1, $t1, 0xFF                # Keep only the lowest byte
+
+    # Get submarine's current position
+    lw $t2, sub_x                      # Load submarine's x-position
+    lw $t3, sub_y                      # Load submarine's y-position
+    lw $t5, DISPLAY_HEIGHT             # Load display height
+    lw $t7, sub_length                 # Load submarine's length
+
+    # Check for 'w' - move up
+    li $t9, 'w'                        # ASCII code for 'w'
+    bne $t1, $t9, not_up               # If key is not 'w', skip
+    li $t4, 0                          # Set direction to up
+    sw $t4, sub_direction              # Store direction
+    addi $t3, $t3, -10                  # Move submarine up by 6 pixels
+    blt $t3, 0, reset_position         # If y < 0, reset position
+    j update_position                  # Update position
+
+not_up:
+    # Check for 's' - move down
+    li $t9, 's'                        # ASCII code for 's'
+    bne $t1, $t9, check_done           # If key is not 's', exit
+    li $t4, 2                          # Set direction to down
+    sw $t4, sub_direction              # Store direction
+    addi $t3, $t3, 10                   # Move submarine down by 6 pixels
+    add $t8, $t3, $t7                  # Calculate bottom edge of submarine
+    bge $t8, $t5, reset_position       # If bottom edge >= display height, reset position
+    j update_position                  # Update position
+
+reset_position:
+    # Reset position to previous valid position
+    lw $t3, sub_y                      # Load previous y-position
+
+update_position:
+    # Update submarine's y-position
+    sw $t3, sub_y                      # Store new y-position
+
+check_done:
+    # Restore return address
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra                             # Return to caller
+    
+Exit: 
+	li $v0, 10
+	syscall
