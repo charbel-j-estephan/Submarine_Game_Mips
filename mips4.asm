@@ -257,8 +257,11 @@ main:
     sw $t1, frame_counter              # Store updated counter
 
     lw $t2, frame_rate                 # Load target frame rate
-    blt $t1, $t2, skip_delay           # Skip delay if counter < frame rate
+    slt $t3, $t1, $t2                  # Set $t3=1 if counter < frame rate
+    beq $t3, $zero, reset_counter      # If $t3=0 (counter >= rate), reset counter
+    j skip_delay                       # Skip delay if counter < frame rate
 
+reset_counter:
     # Reset frame counter when we reach target rate
     li $t1, 0                          # Reset counter to 0
     sw $t1, frame_counter              # Store reset counter
@@ -278,8 +281,8 @@ draw_sea_at_submarine:
     lw $t3, sub_width                  # Submarine's width
 
     # Calculate rectangle to clear (centered on submarine's old position)
-    sra $t4, $t2, 1                    # Half of submarine's length
-    sra $t5, $t3, 1                    # Half of submarine's width
+    srl $t4, $t2, 1                    # Half of submarine's length (right shift by 1)
+    srl $t5, $t3, 1                    # Half of submarine's width (right shift by 1)
     sub $t0, $t0, $t4                  # Left edge of rectangle
     sub $t1, $t1, $t5                  # Top edge of rectangle
 
@@ -293,23 +296,31 @@ draw_sea_at_submarine:
     li $t6, 0                          # Initialize y-counter
 
 sea_clear_y_loop:
-    bge $t6, $t3, sea_clear_done       # If y-counter >= height, exit loop
+    slt $t9, $t6, $t3                  # Set $t9=1 if y-counter < height
+    beq $t9, $zero, sea_clear_done     # If $t9=0 (y-counter >= height), exit loop
     li $t7, 0                          # Initialize x-counter
 
 sea_clear_x_loop:
-    bge $t7, $t2, sea_clear_next_y     # If x-counter >= width, move to next row
+    slt $t9, $t7, $t2                  # Set $t9=1 if x-counter < width
+    beq $t9, $zero, sea_clear_next_y   # If $t9=0 (x-counter >= width), move to next row
 
     # Calculate actual x, y coordinates
     add $a0, $t0, $t7                  # x = left + x-counter
     add $a1, $t1, $t6                  # y = top + y-counter
 
     # Check if x, y is within screen bounds
-    bltz $a0, sea_skip_pixel           # Skip if x < 0
-    bltz $a1, sea_skip_pixel           # Skip if y < 0
+    slti $t9, $a0, 0                   # Set $t9=1 if x < 0
+    bne $t9, $zero, sea_skip_pixel     # Skip if x < 0
+    slti $t9, $a1, 0                   # Set $t9=1 if y < 0
+    bne $t9, $zero, sea_skip_pixel     # Skip if y < 0
+    
     lw $t8, DISPLAY_WIDTH
-    bge $a0, $t8, sea_skip_pixel       # Skip if x >= display width
+    slt $t9, $a0, $t8                  # Set $t9=1 if x < display width
+    beq $t9, $zero, sea_skip_pixel     # Skip if x >= display width
+    
     lw $t8, DISPLAY_HEIGHT
-    bge $a1, $t8, sea_skip_pixel       # Skip if y >= display height
+    slt $t9, $a1, $t8                  # Set $t9=1 if y < display height
+    beq $t9, $zero, sea_skip_pixel     # Skip if y >= display height
 
     # Get animation state for wave pattern
     lw $t9, animation_offset           # Load animation offset
@@ -338,8 +349,8 @@ sea_clear_x_loop:
     lw $k0, sea_highlight              # Highlight sea color
 
     # Choose color based on pattern
-    beqz $k1, use_light_sea            # If not, use light color
-    move $t8, $k0                      # Use highlight color
+    beq $k1, $zero, use_light_sea      # If $k1=0 (value >= 32), use light color
+    add $t8,$zero , $k0                      # Use highlight color
 
 use_light_sea:
     sw $t8, 0($v0)                     # Store color at calculated address
@@ -357,6 +368,7 @@ sea_clear_done:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra                             # Return to caller
+
 # ---- Function: Draw only 1/4 of the sea each frame for faster animation ----
 draw_sea_partial:
     # Save essential registers
@@ -390,7 +402,7 @@ sea_row_loop:
 
 sea_col_loop:
     # Default to sea_light color
-    move $t8, $s0                      # Set default color to sea_light
+    add $t8, $s0, $zero                # Set default color to sea_light (instead of move)
 
     # Simplified wave pattern calculation
     add $a0, $t7, $t6                  # x + y
@@ -407,21 +419,28 @@ sea_col_loop:
     add $a3, $a0, $a1                  # Combine x and y patterns
     andi $a3, $a3, 0x3F                # Modulo 64
     slti $k0, $a3, 32                  # Check if value < 32
-    beqz $k0, use_light                # If not, use light color
+    
+    # Replace beqz with explicit compare
+    beq $k0, $zero, use_light          # If $k0=0 (value >= 32), use light color
 
     # Check if gradient is needed
     slti $k0, $a3, 4                   # Check if value < 4
-    bnez $k0, light_to_highlight_gradient # If yes, apply gradient
+    
+    # Replace bnez with explicit compare
+    bne $k0, $zero, light_to_highlight_gradient # If $k0=1 (value < 4), apply gradient
+    
     slti $k0, $a3, 28                  # Check if value < 28
-    beqz $k0, highlight_to_light_gradient # If yes, apply gradient
+    
+    # Replace beqz with explicit compare
+    beq $k0, $zero, highlight_to_light_gradient # If $k0=0 (value >= 28), apply gradient
 
     # Core highlight region
-    move $t8, $t3                      # Use highlight color
+    add $t8, $t3, $zero                # Use highlight color (instead of move)
     j store_pixel                      # Jump to store pixel
 
 use_light:
     # Use light color directly
-    move $t8, $s0                      # Set color to sea_light
+    add $t8, $s0, $zero                # Set color to sea_light (instead of move)
     j store_pixel                      # Jump to store pixel
 
 light_to_highlight_gradient:
@@ -444,9 +463,9 @@ light_to_highlight_gradient:
     sll $v0, $v0, 8                    # Shift back to G position
 
     # Extract B components
-    move $v1, $s0                      # Extract B component of light color
+    add $v1, $s0, $zero                # Extract B component of light color (instead of move)
     andi $v1, $v1, 0xFF
-    move $k1, $t3                      # Extract B component of highlight color
+    add $k1, $t3, $zero                # Extract B component of highlight color (instead of move)
     andi $k1, $k1, 0xFF
     add $v1, $v1, $k1                  # Sum B components
     srl $v1, $v1, 1                    # Divide by 2 (average)
@@ -474,11 +493,17 @@ store_pixel:
 
     # Next column (skip one for 2x2 blocks)
     addi $t7, $t7, 2                   # Increment x-counter by 2
-    blt $t7, $t1, sea_col_loop         # Repeat for next column
+    
+    # Replace blt with slt + beq
+    slt $k0, $t7, $t1                  # Set $k0=1 if x < width
+    bne $k0, $zero, sea_col_loop       # If $k0=1 (x < width), repeat for next column
 
     # Next row (skip one for 2x2 blocks)
     addi $t6, $t6, 1                   # Increment y-counter by 1
-    blt $t6, $t5, sea_row_loop         # Repeat for next row
+    
+    # Replace blt with slt + beq
+    slt $k0, $t6, $t5                  # Set $k0=1 if y < end_row
+    bne $k0, $zero, sea_row_loop       # If $k0=1 (y < end_row), repeat for next row
 
     # Restore registers
     lw $s0, 4($sp)
@@ -509,79 +534,97 @@ draw_image_submarine:
     sw $s1, 8($sp)
     sw $s2, 12($sp)
 
-    # Load submarine position
+    # Load submarine position and image dimensions
     lw $s0, sub_x                      # Load submarine's x-position
     lw $s1, sub_y                      # Load submarine's y-position
-
-    # Load image dimensions
     lw $s2, sub_img_width              # Load submarine image width
     lw $s3, sub_img_height             # Load submarine image height
+    lw $t2, sub_direction              # Load submarine direction
 
     # Calculate top-left corner of image
-    sra $t0, $s2, 1                    # Half width
-    sra $t1, $s3, 1                    # Half height
+    li $t0, 2                          # Divisor for integer division
+    div $s2, $t0                       # Divide width by 2
+    mflo $t0                           # Get quotient in $t0 (half width)
+    div $s3, $t0                       # Divide height by 2
+    mflo $t1                           # Get quotient in $t1 (half height)
     sub $s0, $s0, $t0                  # Adjust x to center
     sub $s1, $s1, $t1                  # Adjust y to center
-
-    # Check submarine direction (0 = up, 2 = down)
-    lw $t2, sub_direction              # Load submarine direction
 
     # Draw the image
     li $t3, 0                          # Initialize row counter (y)
 
 image_row_loop:
-    beq $t3, $s3, image_done           # If row counter >= height, exit loop
+    # Check if we've drawn all rows
+    beq $t3, $s3, image_done           # If row counter == height, exit loop
+
+    # Handle row index based on direction
+    add $t9, $zero, $t3                # Copy t3 to t9 (replaces move)
+    
+    # If direction is down (2), invert the row index
+    li $t5, 2                          # Load constant 2
+    bne $t2, $t5, normal_direction     # If direction != 2, skip inversion
+    
+    # Invert row for downward direction
+    sub $t9, $s3, $t3                  # Invert: use (height - current_row)
+    addi $t9, $t9, -1                  # Adjust for zero-based indexing
+    
+normal_direction:
+    # Calculate base address for this row in color array
+    mul $t5, $t9, $s2                  # row * width
+    sll $t5, $t5, 2                    # Convert to byte offset (4 bytes per word)
+    la $t6, color_array                # Load address of color array
+    add $t6, $t6, $t5                  # Address of start of row in color array
+    
+    # Reset column counter
     li $t4, 0                          # Initialize column counter (x)
 
-    # If submarine is pointing down, invert the row index
-    move $t9, $t3                      # Default row index
-    beq $t2, 0, normal_direction       # If direction is up, skip inversion
-
-    # For downward direction, invert the row
-    sub $t9, $s3, $t3                  # Invert row index
-    addi $t9, $t9, -1                  # Adjust for zero-based indexing
-
-normal_direction:
-    # Calculate base index into color array for this row
-    mul $t5, $t9, $s2                  # row * width
-    la $t6, color_array                # Load address of color array
-    sll $t5, $t5, 2                    # Convert to byte offset (4 bytes per word)
-    add $t6, $t6, $t5                  # Address of start of row in color array
-
 image_col_loop:
-    beq $t4, $s2, next_image_row       # If column counter >= width, move to next row
+    # Check if we've drawn all columns
+    beq $t4, $s2, next_image_row       # If column counter == width, move to next row
 
     # Load color from array
     sll $t5, $t4, 2                    # Convert column to byte offset
     add $t7, $t6, $t5                  # Address of color
     lw $t8, 0($t7)                     # Load color
 
-    # Skip drawing if color is 0x000000 (transparent)
-    beqz $t8, skip_pixel               # If color is transparent, skip
+    # Skip transparent pixels (color = 0)
+    li $t5, 0                          # Load constant 0
+    beq $t8, $t5, skip_pixel           # If color == 0, skip
 
     # Calculate screen position
     add $a0, $s0, $t4                  # x = left + x-counter
     add $a1, $s1, $t3                  # y = top + y-counter
 
-    # Check if pixel is within screen bounds
-    bltz $a0, skip_pixel               # Skip if x < 0
-    bltz $a1, skip_pixel               # Skip if y < 0
-    lw $t7, DISPLAY_WIDTH
-    bge $a0, $t7, skip_pixel           # Skip if x >= display width
-    lw $t7, DISPLAY_HEIGHT
-    bge $a1, $t7, skip_pixel           # Skip if y >= display height
+    # Check if pixel is within screen bounds (x >= 0)
+    li $t5, 0                          # Load constant 0
+    slt $t7, $a0, $t5                  # t7 = 1 if x < 0, else 0
+    bne $t7, $zero, skip_pixel         # Skip if x < 0 (t7 != 0)
+    
+    # Check if y >= 0
+    slt $t7, $a1, $t5                  # t7 = 1 if y < 0, else 0
+    bne $t7, $zero, skip_pixel         # Skip if y < 0 (t7 != 0)
+    
+    # Check if x < display width
+    lw $t5, DISPLAY_WIDTH              # Load display width
+    slt $t7, $a0, $t5                  # t7 = 1 if x < width, else 0
+    beq $t7, $zero, skip_pixel         # Skip if x >= width (t7 == 0)
+    
+    # Check if y < display height
+    lw $t5, DISPLAY_HEIGHT             # Load display height
+    slt $t7, $a1, $t5                  # t7 = 1 if y < height, else 0
+    beq $t7, $zero, skip_pixel         # Skip if y >= height (t7 == 0)
 
     # Draw pixel
-    jal calc_position                  # Calculate memory address
+    jal calc_position
     sw $t8, 0($v0)                     # Store pixel color
 
 skip_pixel:
-    addi $t4, $t4, 1                   # Increment column counter
-    j image_col_loop                   # Repeat for next column
+    addi $t4, $t4, 1                   # Move to next column
+    j image_col_loop
 
 next_image_row:
-    addi $t3, $t3, 1                   # Increment row counter
-    j image_row_loop                   # Repeat for next row
+    addi $t3, $t3, 1                   # Move to next row
+    j image_row_loop
 
 image_done:
     # Restore registers and return
@@ -590,7 +633,7 @@ image_done:
     lw $s0, 4($sp)
     lw $ra, 0($sp)
     addi $sp, $sp, 16
-    jr $ra                             # Return to caller
+    jr $ra
 # ---- Function: Draw shark ----
 draw_shark:
     addi $sp, $sp, -16
@@ -607,7 +650,10 @@ draw_shark:
     lw $t4, shark_height     # shark height
 
 shark_row_loop:
-    beq $t3, $t4, shark_done
+    # Check if row counter == height
+    sub $t7, $t3, $t4
+    beq $t7, $zero, shark_done
+
     li $t5, 0               # Column counter
 
     la $t6, shark_color_array
@@ -616,22 +662,40 @@ shark_row_loop:
     add $t6, $t6, $t7       # row address
 
 shark_col_loop:
-    beq $t5, $s2, next_shark_row
+    # Check if column counter == width
+    sub $t7, $t5, $s2
+    beq $t7, $zero, next_shark_row
 
     sll $t7, $t5, 2
     add $t8, $t6, $t7
     lw $t9, 0($t8)          # Load shark color
-    beqz $t9, skip_shark_pixel  # Skip if color is 0 (black/transparent)
+    
+    # Skip if color is 0 (transparent)
+    li $t7, 0
+    beq $t9, $t7, skip_shark_pixel
+    
     add $a0, $s0, $t5       # x = shark_x + column
     add $a1, $s1, $t3       # y = shark_y + row
 
-    # Bounds check
-    bltz $a0, skip_shark_pixel
+    # Bounds check (x < 0)
+    li $t7, 0
+    slt $t8, $a0, $t7       # t8 = 1 if x < 0, else 0
+    bne $t8, $zero, skip_shark_pixel
+    
+    # Bounds check (x >= DISPLAY_WIDTH)
     lw $t7, DISPLAY_WIDTH
-    bge $a0, $t7, skip_shark_pixel
-    bltz $a1, skip_shark_pixel
+    slt $t8, $a0, $t7       # t8 = 1 if x < width, else 0
+    beq $t8, $zero, skip_shark_pixel
+    
+    # Bounds check (y < 0)
+    li $t7, 0
+    slt $t8, $a1, $t7       # t8 = 1 if y < 0, else 0
+    bne $t8, $zero, skip_shark_pixel
+    
+    # Bounds check (y >= DISPLAY_HEIGHT)
     lw $t7, DISPLAY_HEIGHT
-    bge $a1, $t7, skip_shark_pixel
+    slt $t8, $a1, $t7       # t8 = 1 if y < height, else 0
+    beq $t8, $zero, skip_shark_pixel
 
     jal calc_position
     sw $t9, 0($v0)
@@ -651,6 +715,7 @@ shark_done:
     lw $s2, 12($sp)
     addi $sp, $sp, 16
     jr $ra
+
 # ---- Function: Move shark left ----
 move_shark:
     # Save return address
@@ -668,8 +733,10 @@ move_shark:
     # Clear previous shark position
     jal clear_shark_previous
 
-    # Reset shark position if off-screen
-    bgez $t0, no_reset
+    # Reset shark position if off-screen (t0 >= 0)
+    li $t7, 0
+    slt $t8, $t0, $t7       # t8 = 1 if t0 < 0, else 0
+    beq $t8, $zero, no_reset
     
     # Reset x position
     li $t0, 256
@@ -718,7 +785,11 @@ clear_shark_previous:
     # Only clear if previous position is valid and different from current
     lw $t0, shark_x
     beq $s0, $t0, skip_clear  # Skip if positions are the same
-    bltz $s0, skip_clear      # Skip if previous position was off-screen
+    
+    # Skip if previous position was off-screen (s0 < 0)
+    li $t7, 0
+    slt $t8, $s0, $t7        # t8 = 1 if s0 < 0, else 0
+    bne $t8, $zero, skip_clear
 
     # Get shark dimensions
     lw $t2, shark_width
@@ -728,23 +799,39 @@ clear_shark_previous:
     li $t4, 0            # Initialize y-counter
 
 shark_clear_y_loop:
-    bge $t4, $t3, shark_clear_done
+    # Check if y-counter >= shark_height
+    slt $t7, $t4, $t3     # t7 = 1 if t4 < t3, else 0
+    beq $t7, $zero, shark_clear_done
+    
     li $t5, 0            # Initialize x-counter
 
 shark_clear_x_loop:
-    bge $t5, $t2, shark_clear_next_y
+    # Check if x-counter >= shark_width
+    slt $t7, $t5, $t2     # t7 = 1 if t5 < t2, else 0
+    beq $t7, $zero, shark_clear_next_y
 
     # Calculate pixel position
     add $a0, $s0, $t5    # x = shark_prev_x + x_counter
     add $a1, $s1, $t4    # y = shark_y + y_counter
 
-    # Check if within screen bounds
-    bltz $a0, shark_skip_pixel
-    bltz $a1, shark_skip_pixel
+    # Check if within screen bounds (x >= 0)
+    li $t7, 0
+    slt $t8, $a0, $t7     # t8 = 1 if a0 < 0, else 0
+    bne $t8, $zero, shark_skip_pixel
+    
+    # Check if y >= 0
+    slt $t8, $a1, $t7     # t8 = 1 if a1 < 0, else 0
+    bne $t8, $zero, shark_skip_pixel
+    
+    # Check if x < DISPLAY_WIDTH
     lw $t6, DISPLAY_WIDTH
-    bge $a0, $t6, shark_skip_pixel
+    slt $t8, $a0, $t6     # t8 = 1 if a0 < t6, else 0
+    beq $t8, $zero, shark_skip_pixel
+    
+    # Check if y < DISPLAY_HEIGHT
     lw $t6, DISPLAY_HEIGHT
-    bge $a1, $t6, shark_skip_pixel
+    slt $t8, $a1, $t6     # t8 = 1 if a1 < t6, else 0
+    beq $t8, $zero, shark_skip_pixel
 
     # Get animation state for wave pattern
     lw $t9, animation_offset
@@ -766,15 +853,17 @@ shark_clear_x_loop:
     # Pattern decision
     add $k0, $a2, $a3      # Combine patterns
     andi $k0, $k0, 0x3F    # Modulo 64
-    slti $k1, $k0, 32      # Check if value < 32
+    li $t7, 32
+    slt $k1, $k0, $t7      # k1 = 1 if k0 < 32, else 0
 
     # Load sea colors
     lw $t8, sea_light      # Light sea color
     lw $k0, sea_highlight  # Highlight sea color
 
     # Choose color based on pattern
-    beqz $k1, use_light_shark
-    move $t8, $k0          # Use highlight color
+    li $t7, 0
+    beq $k1, $t7, use_light_shark  # If k1 == 0, use light color
+    add $t8, $zero, $k0    # Use highlight color (replaces move)
 
 use_light_shark:
     sw $t8, 0($v0)         # Store color at calculated address
@@ -801,63 +890,71 @@ check_collision:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
 
-    # Load submarine position and dimensions
-    lw $t0, sub_x
-    lw $t1, sub_y
-    lw $t2, sub_length
-    lw $t3, sub_width
+    # Load positions and dimensions
+    lw $t0, sub_x            # Submarine x
+    lw $t1, sub_y            # Submarine y
+    lw $t2, sub_length       # Submarine length
+    lw $t3, sub_width        # Submarine width
+    lw $t4, shark_x          # Shark x
+    lw $t5, shark_y          # Shark y
+    lw $t6, shark_width      # Shark width
+    lw $t7, shark_height     # Shark height
+    lw $t8, nb_lifes         # Current lives
 
-    # Load shark position and dimensions
-    lw $t4, shark_x
-    lw $t5, shark_y
-    lw $t6, shark_width
-    lw $t7, shark_height
+    # Calculate submarine boundaries (using div by 2 instead of sra)
+    li $s7, 2
+    div $t2, $s7             # Half submarine length
+    mflo $s0
+    div $t3, $s7             # Half submarine width
+    mflo $s1
+    
+    sub $a0, $t0, $s0        # Sub left
+    add $a1, $t0, $s0        # Sub right
+    sub $a2, $t1, $s1        # Sub top
+    add $a3, $t1, $s1        # Sub bottom
 
-    # Load current number of lives
-    lw $t8, nb_lifes
+    # Calculate shark boundaries (using add instead of move)
+    add $s0, $t4, $zero      # Shark left
+    add $s1, $t4, $t6        # Shark right
+    add $s2, $t5, $zero      # Shark top
+    add $s3, $t5, $t7        # Shark bottom
 
-    # Calculate submarine boundaries
-    sra $s0, $t2, 1           # Half of submarine length
-    sra $s1, $t3, 1           # Half of submarine width
-    sub $a0, $t0, $s0         # left = x - half_length
-    add $a1, $t0, $s0         # right = x + half_length
-    sub $a2, $t1, $s1         # top = y - half_width
-    add $a3, $t1, $s1         # bottom = y + half_width
+    # Check for collision (using slt instead of bge)
+    slt $t9, $s1, $a0        # shark_right < sub_left
+    bne $t9, $zero, no_collision
+    
+    slt $t9, $a1, $s0        # sub_right < shark_left
+    bne $t9, $zero, no_collision
+    
+    slt $t9, $s3, $a2        # shark_bottom < sub_top
+    bne $t9, $zero, no_collision
+    
+    slt $t9, $a3, $s2        # sub_bottom < shark_top
+    bne $t9, $zero, no_collision
 
-    # Calculate shark boundaries
-    li $s0, 0                 # shark_left = shark_x
-    add $s0, $t4, $zero
-    add $s1, $t4, $t6         # shark_right = shark_x + shark_width
-    li $s2, 0                 # shark_top = shark_y
-    add $s2, $t5, $zero
-    add $s3, $t5, $t7         # shark_bottom = shark_y + shark_height
-
-    # Check for collision (if any boundaries overlap)
-    bge $a0, $s1, no_collision  # sub_left >= shark_right
-    bge $s0, $a1, no_collision  # shark_left >= sub_right
-    bge $a2, $s3, no_collision  # sub_top >= shark_bottom
-    bge $s2, $a3, no_collision  # shark_top >= sub_bottom
-
-    # If we get here, a collision has occurred
-    # Decrement lives
+    # Collision occurred, decrement lives
     addi $t8, $t8, -1
     sw $t8, nb_lifes
 
-    # Check if out of lives
-    beqz $t8, game_over
-
-    # Set up for syscall 50 (ConfirmDialog)
-    li $v0, 50                # Syscall for ConfirmDialog
-    la $a0, collision_msg     # Message to display
+    # Check if out of lives (using sub and bne instead of beqz)
+    sub $t9, $t8, $zero
+    bne $t9, $zero, still_alive
+    j game_over
     
-    # Display the dialog
+still_alive:
+    # Set up for syscall 50 (ConfirmDialog)
+    li $v0, 50                
+    la $a0, collision_msg    
     syscall
     
     li $t9, 1
-    beq $a0, $t9, Exit  # If user clicked "No" (1), exit the game
+    sub $t0, $a0, $t9
+    bne $t0, $zero, continue_game
+    j Exit  # User clicked "No" (1), exit game
     
+continue_game:
     # Reset shark position after collision
-    li $t0, 256               # Move shark off-screen to the right
+    li $t0, 256              
     sw $t0, shark_x
 
 no_collision:
@@ -867,17 +964,18 @@ no_collision:
     jr $ra
 
 game_over:
-
-    #####ADD THE GAME OVER IMAGE 
-    
     # Set up for syscall 50 (ConfirmDialog) for game over
     li $v0, 50
     la $a0, game_over_msg
     syscall
     
-    # Check result (stored in $a0)
-    beqz $a0, restart_game    # If user clicked "Yes" (0), restart
-    j Exit                    # Otherwise, exit the program
+    # Check result (using slt and bne instead of beqz)
+    slt $t9, $a0, $zero     # if $a0 < 0
+    bne $t9, $zero, restart_game
+    
+    sub $t9, $a0, $zero     # if $a0 == 0
+    bne $t9, $zero, Exit
+    j restart_game          # User clicked "Yes" (0), restart
 
 restart_game:
     # Reset lives
@@ -895,69 +993,82 @@ restart_game:
 
 # ---- Function: Check keyboard for input ----
 check_keyboard:
-    lw $t3, sub_y                      # Load submarine's current y-position
-    sw $t3, prev_sub_y                 # Store current y-position as previous
+    lw $t3, sub_y                     
+    sw $t3, prev_sub_y                
 
     # Save return address
     addi $sp, $sp, -4
     sw $ra, 0($sp)
 
-    # Get keyboard ready bit address (control register)
+    # Get keyboard ready bit address
     lw $t0, KEYBOARD_ADDR
-    addi $t0, $t0, -4                  # Keyboard control is 4 bytes before data
+    addi $t0, $t0, -4                 
 
     # Check if a key is ready
-    lw $t1, 0($t0)                     # Load control value
-    andi $t1, $t1, 1                   # Check ready bit
-    beqz $t1, check_done               # If not ready, exit
+    lw $t1, 0($t0)                    
+    andi $t1, $t1, 1                  
+    
+    # Compare to zero (using sub and bne instead of beqz)
+    sub $t9, $t1, $zero
+    bne $t9, $zero, key_ready
+    j check_done                      
 
+key_ready:
     # Get keyboard data address
     lw $t0, KEYBOARD_ADDR
 
     # Read character from keyboard
-    lw $t1, 0($t0)                     # Read full word instead of byte
-    andi $t1, $t1, 0xFF                # Keep only the lowest byte
+    lw $t1, 0($t0)                    
+    andi $t1, $t1, 0xFF               
 
     # Get submarine's current position
-    lw $t2, sub_x                      # Load submarine's x-position
-    lw $t3, sub_y                      # Load submarine's y-position
-    lw $t5, DISPLAY_HEIGHT             # Load display height
-    lw $t7, sub_length                 # Load submarine's length
+    lw $t2, sub_x                     
+    lw $t3, sub_y                     
+    lw $t5, DISPLAY_HEIGHT            
+    lw $t7, sub_length                
 
     # Check for 'w' - move up
-    li $t9, 'w'                        # ASCII code for 'w'
-    bne $t1, $t9, not_up               # If key is not 'w', skip
-    li $t4, 0                          # Set direction to up
-    sw $t4, sub_direction              # Store direction
-    addi $t3, $t3, -10                  # Move submarine up by 6 pixels
-    blt $t3, 0, reset_position         # If y < 0, reset position
-    j update_position                  # Update position
+    li $t9, 'w'                       
+    sub $t0, $t1, $t9
+    bne $t0, $zero, not_up            
+    
+    li $t4, 0                         
+    sw $t4, sub_direction             
+    addi $t3, $t3, -10                
+    
+    slt $t0, $t3, $zero               # if $t3 < 0
+    bne $t0, $zero, reset_position
+    j update_position                 
 
 not_up:
     # Check for 's' - move down
-    li $t9, 's'                        # ASCII code for 's'
-    bne $t1, $t9, check_done           # If key is not 's', exit
-    li $t4, 2                          # Set direction to down
-    sw $t4, sub_direction              # Store direction
-    addi $t3, $t3, 10                   # Move submarine down by 6 pixels
-    add $t8, $t3, $t7                  # Calculate bottom edge of submarine
-    bge $t8, $t5, reset_position       # If bottom edge >= display height, reset position
-    j update_position                  # Update position
+    li $t9, 's'                       
+    sub $t0, $t1, $t9
+    bne $t0, $zero, check_done        
+    
+    li $t4, 2                         
+    sw $t4, sub_direction             
+    addi $t3, $t3, 10                 
+    add $t8, $t3, $t7                 
+    
+    slt $t0, $t5, $t8                 # if DISPLAY_HEIGHT < bottom edge
+    bne $t0, $zero, reset_position
+    j update_position                 
 
 reset_position:
     # Reset position to previous valid position
-    lw $t3, sub_y                      # Load previous y-position
+    lw $t3, sub_y                     
 
 update_position:
     # Update submarine's y-position
-    sw $t3, sub_y                      # Store new y-position
+    sw $t3, sub_y                    
 
 check_done:
     # Restore return address
     lw $ra, 0($sp)
     addi $sp, $sp, 4
-    jr $ra                             # Return to caller
+    jr $ra                            
     
 Exit: 
-	li $v0, 10
-	syscall
+    li $v0, 10
+    syscall
