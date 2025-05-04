@@ -80,6 +80,7 @@
     instrument: .byte 65
     volume: .byte 100
     songLength: .word 4
+    debug_msg: .asciiz "PlaySong function called!\n"
 
 .text
 restart_game:
@@ -916,6 +917,7 @@ check_collision:
     bne $t9, $zero, no_collision
 
     # Collision occurred, decrement lives
+    jal Collisionsound
     addi $t8, $t8, -1
     sw $t8, nb_lifes
 
@@ -1055,7 +1057,9 @@ game_over_display_loop:
 
 game_over_display_done:
     jal PlaySong 
-    jr $ra  # Return from function
+    li $v0, 10
+    syscall
+      # Return from function
 
 bitmap_base_error:
     # Display an error message if BITMAP_BASE is not set
@@ -1070,53 +1074,89 @@ color_array_error:
     la $a0, color_array_error_msg
     syscall
     j Exit
+    
 PlaySong:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
-    
-    li $t0, 0                
-    lw $t1, songLength       
-    lb $t3, duration         
-    lb $t4, instrument       
-    lb $t5, volume 
-    lw $t6, notedelay
-    
-PlayLoop:
-    beq $t0, $t1, PlaySongEnd
-    la $t2, pitches1
-    subi $t7, $t0, 3  
-    beq $t7, $zero, P11  
-      
 
-Song:         
-    add $t2, $t2, $t0        
-    lb $a0, 0($t2)           
-    add $a1, $t3 ,$zero            
-    add $a2, $t4 ,$zero           
-    add $a3, $t5 ,$zero          
-    li $v0, 31         
+    li $v0, 31          
+    li $a0, 60          
+    li $a1, 1750        
+    li $a2, 65          
+    li $a3, 100         
     syscall
-    li $v0, 32             
-    add $a0, $t6 , $zero
+
+    li $v0, 32         
+    li $a0, 950         
     syscall
-    lw $t6, notedelay
-    lb $t3, duration 
-    li $t7, 0  
-    addi $t0, $t0, 1
-    j PlayLoop
-    
-PlaySongEnd:
+
+    li $v0, 31
+    li $a0, 55          
+    li $a1, 1750        
+    li $a2, 65          
+    li $a3, 100         
+    syscall
+
+    li $v0, 32
+    li $a0, 950
+    syscall
+
+    li $v0, 31
+    li $a0, 52          
+    li $a1, 1750        
+    li $a2, 65          
+    li $a3, 100         
+    syscall
+
+    li $v0, 32
+    li $a0, 950
+    syscall
+
+    li $v0, 31
+    li $a0, 48          
+    li $a1, 1750        
+    li $a2, 65          
+    li $a3, 100         
+    syscall
+
+    li $v0, 32
+    li $a0, 950
+    syscall
+
+    li $v0, 32
+    li $a0, 300
+    syscall
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra  
+
+Collisionsound:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    li $v0, 31          
+    li $a0, 80          
+    li $a1, 500        
+    li $a2, 127          
+    li $a3, 100         
+    syscall
+
+    li $v0, 32         
+    li $a0, 300         
+    syscall
+
+    li $v0, 31
+    li $a0, 65          
+    li $a1, 500       
+    li $a2, 127         
+    li $a3, 100         
+    syscall
+
+    li $v0, 32
+    li $a0, 300
+    syscall
+
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
-    
-P11:
-    jal P1
-    j Song
-P1:
-    subi $t6, $t6, 540
-    subi $t3, $t3, 1000
-    li $t7, 0
-    jr $ra
-
-
